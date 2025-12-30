@@ -40,7 +40,7 @@ inputs:
     required: false
     default: 'false'
   nuke:
-    description: 'Nuke packages via dpkg -L (browsers, databases, cloud CLIs) - experimental'
+    description: 'Nuke additional bloat: browsers, databases, cloud CLIs, build tools - experimental'
     required: false
     default: 'false'
   merge-disks:

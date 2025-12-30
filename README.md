@@ -92,7 +92,7 @@ Uses Btrfs with zstd compression for the merged volume.
 | `remove-codeql` | Remove CodeQL (~1GB) | `true` |
 | `remove-hostedtoolcache` | Remove cached tool versions - Go, Node.js, Python, Ruby, etc. (~8GB) | `false` |
 | `remove-docker-images` | Remove Docker images (~4GB) | `false` |
-| `nuke` | Experimental: Remove browsers, databases, cloud CLIs via dpkg | `false` |
+| `nuke` | Experimental: Remove browsers, databases, cloud CLIs, build tools | `false` |
 | `merge-disks` | Merge root and /mnt into single LVM volume | `false` |
 | `use-btrfs` | Use Btrfs with zstd compression (requires merge-disks) | `false` |
 
