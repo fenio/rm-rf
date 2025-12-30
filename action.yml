@@ -62,7 +62,7 @@ runs:
       shell: bash
       run: |
         echo "============================================"
-        echo "  rmrf - Initial Disk State"
+        echo "  gh-rmrf - Initial Disk State"
         echo "============================================"
         echo ""
         df -h
@@ -431,7 +431,7 @@ runs:
       run: |
         echo ""
         echo "============================================"
-        echo "  rmrf - Summary"
+        echo "  gh-rmrf - Summary"
         echo "============================================"
         echo ""
         
@@ -468,5 +468,5 @@ runs:
         
         echo ""
         echo "============================================"
-        echo "  rmrf complete!"
+        echo "  gh-rmrf complete!"
         echo "============================================"
