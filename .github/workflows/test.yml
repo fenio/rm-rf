@@ -1,4 +1,4 @@
-name: Test rm-rf
+name: Test gh-rmrf
 
 on:
   push:
