@@ -397,34 +397,14 @@ runs:
           echo ">>> Formatting as Btrfs with zstd compression..."
           sudo mkfs.btrfs -f /dev/workspace/work
           
-          echo ">>> Mounting at /home/runner/work..."
-          # Preserve _actions cache before mounting
-          if [[ -d /home/runner/work/_actions ]]; then
-            echo ">>> Preserving _actions cache..."
-            sudo cp -a /home/runner/work/_actions /tmp/_actions_backup
-          fi
-          sudo mount -o compress=zstd /dev/workspace/work /home/runner/work
-          # Restore _actions cache after mounting
-          if [[ -d /tmp/_actions_backup ]]; then
-            echo ">>> Restoring _actions cache..."
-            sudo mv /tmp/_actions_backup /home/runner/work/_actions
-          fi
+          echo ">>> Mounting at ${GITHUB_WORKSPACE}..."
+          sudo mount -o compress=zstd /dev/workspace/work "${GITHUB_WORKSPACE}"
         else
           echo ">>> Formatting as ext4..."
           sudo mkfs.ext4 -F /dev/workspace/work
           
-          echo ">>> Mounting at /home/runner/work..."
-          # Preserve _actions cache before mounting
-          if [[ -d /home/runner/work/_actions ]]; then
-            echo ">>> Preserving _actions cache..."
-            sudo cp -a /home/runner/work/_actions /tmp/_actions_backup
-          fi
-          sudo mount /dev/workspace/work /home/runner/work
-          # Restore _actions cache after mounting
-          if [[ -d /tmp/_actions_backup ]]; then
-            echo ">>> Restoring _actions cache..."
-            sudo mv /tmp/_actions_backup /home/runner/work/_actions
-          fi
+          echo ">>> Mounting at ${GITHUB_WORKSPACE}..."
+          sudo mount /dev/workspace/work "${GITHUB_WORKSPACE}"
         fi
         
         # Create swap file on root filesystem
@@ -434,15 +414,9 @@ runs:
         sudo mkswap /swap.img
         sudo swapon /swap.img
         
-        # Recreate the working directory structure that GitHub expects
-        # The path is /home/runner/work/<repo>/<repo>
-        REPO_NAME="${GITHUB_REPOSITORY#*/}"
-        echo ">>> Recreating working directory for $REPO_NAME..."
-        sudo mkdir -p "/home/runner/work/${REPO_NAME}/${REPO_NAME}"
-        
         # Fix ownership
         echo ">>> Fixing ownership..."
-        sudo chown -R runner:runner /home/runner/work
+        sudo chown -R runner:runner "${GITHUB_WORKSPACE}"
         
         echo ""
         echo ">>> Disk merge complete!"
@@ -452,7 +426,6 @@ runs:
     # ============================================
     - name: Summary
       shell: bash
-      working-directory: /
       env:
         MERGE_DISKS: ${{ inputs.merge-disks }}
       run: |
@@ -482,9 +455,9 @@ runs:
         echo ""
         
         if [[ "$MERGE_DISKS" == "true" ]]; then
-          WORKSPACE_AVAIL=$(df /home/runner/work --output=avail -BG | tail -1 | tr -d ' G')
-          WORKSPACE_SIZE=$(df /home/runner/work --output=size -BG | tail -1 | tr -d ' G')
-          echo "Merged workspace (/home/runner/work):"
+          WORKSPACE_AVAIL=$(df "${GITHUB_WORKSPACE}" --output=avail -BG | tail -1 | tr -d ' G')
+          WORKSPACE_SIZE=$(df "${GITHUB_WORKSPACE}" --output=size -BG | tail -1 | tr -d ' G')
+          echo "Merged workspace (${GITHUB_WORKSPACE}):"
           echo "  Total size: ${WORKSPACE_SIZE}GB"
           echo "  Available:  ${WORKSPACE_AVAIL}GB"
           echo ""
