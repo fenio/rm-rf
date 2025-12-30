@@ -26,7 +26,7 @@ runs:
       run: |
         echo ">>> Top-level directory sizes (du -sm /*)"
         echo "--------------------------------------------"
-        sudo du -sm /* 2>/dev/null | sort -rn | head -20
+        sudo du -sm /* 2>/dev/null | sort -rn | head -20 || true
         echo ""
 
     - name: Largest directories in /usr
@@ -34,7 +34,7 @@ runs:
       run: |
         echo ">>> Largest directories in /usr"
         echo "--------------------------------------------"
-        sudo du -sm /usr/* 2>/dev/null | sort -rn | head -10
+        sudo du -sm /usr/* 2>/dev/null | sort -rn | head -10 || true
         echo ""
 
     - name: Largest directories in /opt
