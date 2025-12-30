@@ -101,6 +101,8 @@ Uses Btrfs with zstd compression for the merged volume.
 
 ### Merge mode
 
+> **Note:** The disk merging feature is somewhat hackish - it relies on undocumented details of GitHub runner disk layout that could change without notice. It works today, but use at your own risk.
+
 1. Removes bloat (as above)
 2. Disables swap and unmounts `/mnt`
 3. Creates a loopback file from freed space on root (~80% of available)
