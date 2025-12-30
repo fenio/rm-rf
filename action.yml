@@ -1,19 +1,56 @@
 name: 'GTFO'
 description: 'Get The F*** Out - Analyze and reclaim disk space on GitHub runners'
-author: 'bfenski'
+author: 'fenio'
 
 branding:
   icon: 'trash-2'
   color: 'red'
 
+inputs:
+  remove-android:
+    description: 'Remove Android SDK (~12GB)'
+    required: false
+    default: 'true'
+  remove-dotnet:
+    description: 'Remove .NET SDK (~2GB)'
+    required: false
+    default: 'true'
+  remove-haskell:
+    description: 'Remove GHC/Haskell (~2GB)'
+    required: false
+    default: 'true'
+  remove-boost:
+    description: 'Remove Boost (~1GB)'
+    required: false
+    default: 'true'
+  remove-swift:
+    description: 'Remove Swift (~1.5GB)'
+    required: false
+    default: 'true'
+  remove-docker-images:
+    description: 'Remove Docker images'
+    required: false
+    default: 'false'
+  merge-disks:
+    description: 'Merge root and /mnt into single LVM volume'
+    required: false
+    default: 'false'
+  use-btrfs:
+    description: 'Use Btrfs with zstd compression (requires merge-disks: true)'
+    required: false
+    default: 'false'
+
 runs:
   using: 'composite'
   steps:
-    - name: Disk usage overview (df -h)
+    # ============================================
+    # PHASE 1: Report initial disk state
+    # ============================================
+    - name: Initial disk state - filesystem usage
       shell: bash
       run: |
         echo "============================================"
-        echo "  GTFO - Disk Usage Analysis"
+        echo "  GTFO - Initial Disk Usage Analysis"
         echo "============================================"
         echo ""
         echo ">>> Filesystem usage (df -h)"
@@ -21,7 +58,7 @@ runs:
         df -h
         echo ""
 
-    - name: Top-level directory sizes (du -sm /*)
+    - name: Initial disk state - top-level directories
       shell: bash
       run: |
         echo ">>> Top-level directory sizes (du -sm /*)"
@@ -29,7 +66,7 @@ runs:
         sudo du -sm /* 2>/dev/null | sort -rn | head -20 || true
         echo ""
 
-    - name: Largest directories in /usr
+    - name: Initial disk state - /usr breakdown
       shell: bash
       run: |
         echo ">>> Largest directories in /usr"
@@ -37,23 +74,7 @@ runs:
         sudo du -sm /usr/* 2>/dev/null | sort -rn | head -10 || true
         echo ""
 
-    - name: Largest directories in /opt
-      shell: bash
-      run: |
-        echo ">>> Largest directories in /opt (if exists)"
-        echo "--------------------------------------------"
-        sudo du -sm /opt/* 2>/dev/null | sort -rn | head -10 || echo "No /opt directory"
-        echo ""
-
-    - name: Largest directories in /home
-      shell: bash
-      run: |
-        echo ">>> Largest directories in /home"
-        echo "--------------------------------------------"
-        sudo du -sm /home/* 2>/dev/null | sort -rn | head -10 || echo "No /home directory"
-        echo ""
-
-    - name: Contents of /mnt (secondary disk)
+    - name: Initial disk state - /mnt inspection
       shell: bash
       run: |
         echo ">>> Contents of /mnt (secondary disk)"
@@ -64,14 +85,12 @@ runs:
           echo ""
           echo "Contents:"
           sudo ls -la /mnt 2>/dev/null || true
-          echo ""
-          sudo du -sm /mnt/* 2>/dev/null | sort -rn | head -10 || true
         else
           echo "/mnt is not a separate mount point"
         fi
         echo ""
 
-    - name: Docker images (if present)
+    - name: Initial disk state - Docker images
       shell: bash
       run: |
         echo ">>> Docker images"
@@ -83,28 +102,217 @@ runs:
         fi
         echo ""
 
-    - name: Swap and memory info
+    # ============================================
+    # PHASE 2: Install rmz for fast deletion
+    # ============================================
+    - name: Install rmz
       shell: bash
       run: |
-        echo ">>> Memory and swap"
-        echo "--------------------------------------------"
-        free -h 2>/dev/null || vm_stat
+        echo ">>> Installing rmz (fast rm alternative)..."
+        curl -sL https://github.com/SUPERCILEX/fuc/releases/download/3.1.1/x86_64-unknown-linux-gnu-rmz -o /tmp/rmz
+        chmod +x /tmp/rmz
+        echo "rmz installed successfully"
+
+    # ============================================
+    # PHASE 3: Remove bloat
+    # ============================================
+    - name: Remove bloat
+      shell: bash
+      env:
+        REMOVE_ANDROID: ${{ inputs.remove-android }}
+        REMOVE_DOTNET: ${{ inputs.remove-dotnet }}
+        REMOVE_HASKELL: ${{ inputs.remove-haskell }}
+        REMOVE_BOOST: ${{ inputs.remove-boost }}
+        REMOVE_SWIFT: ${{ inputs.remove-swift }}
+        REMOVE_DOCKER: ${{ inputs.remove-docker-images }}
+      run: |
+        echo "============================================"
+        echo "  Removing bloat..."
+        echo "============================================"
+        echo ""
+        
+        paths=()
+        
+        if [[ "$REMOVE_ANDROID" == "true" ]]; then
+          echo "- Marking Android SDK for removal"
+          paths+=("/usr/local/lib/android")
+        fi
+        
+        if [[ "$REMOVE_DOTNET" == "true" ]]; then
+          echo "- Marking .NET SDK for removal"
+          paths+=("/usr/share/dotnet")
+        fi
+        
+        if [[ "$REMOVE_HASKELL" == "true" ]]; then
+          echo "- Marking Haskell/GHC for removal"
+          [[ -d "/opt/ghc" ]] && paths+=("/opt/ghc")
+          [[ -d "/usr/local/.ghcup" ]] && paths+=("/usr/local/.ghcup")
+        fi
+        
+        if [[ "$REMOVE_BOOST" == "true" ]]; then
+          echo "- Marking Boost for removal"
+          paths+=("/usr/local/share/boost")
+        fi
+        
+        if [[ "$REMOVE_SWIFT" == "true" ]]; then
+          echo "- Marking Swift for removal"
+          paths+=("/usr/share/swift")
+        fi
+        
+        echo ""
+        
+        if [[ ${#paths[@]} -gt 0 ]]; then
+          echo "Removing ${#paths[@]} directories with rmz..."
+          echo "Paths: ${paths[*]}"
+          echo ""
+          
+          # Filter to only existing paths
+          existing_paths=()
+          for p in "${paths[@]}"; do
+            if [[ -e "$p" ]]; then
+              existing_paths+=("$p")
+            else
+              echo "Skipping non-existent: $p"
+            fi
+          done
+          
+          if [[ ${#existing_paths[@]} -gt 0 ]]; then
+            time sudo /tmp/rmz "${existing_paths[@]}"
+            echo ""
+            echo "Removal complete!"
+          else
+            echo "No paths to remove."
+          fi
+        else
+          echo "No directories marked for removal."
+        fi
+        
+        # Docker images handled separately
+        if [[ "$REMOVE_DOCKER" == "true" ]]; then
+          echo ""
+          echo "Removing Docker images..."
+          docker system prune -af || true
+        fi
+        
         echo ""
 
-    - name: Summary
+    # ============================================
+    # PHASE 4: Merge disks (optional)
+    # ============================================
+    - name: Merge disks into LVM volume
+      if: ${{ inputs.merge-disks == 'true' }}
       shell: bash
+      env:
+        USE_BTRFS: ${{ inputs.use-btrfs }}
       run: |
         echo "============================================"
-        echo "  Summary - Potential bloat locations"
+        echo "  Merging disks into LVM volume..."
         echo "============================================"
         echo ""
-        echo "Common bloat on GitHub runners:"
-        echo "  - /usr/local/lib/android (~12GB)"
-        echo "  - /usr/share/dotnet (~2GB)"
-        echo "  - /opt/ghc (~2GB)"
-        echo "  - /usr/local/share/boost (~1GB)"
-        echo "  - /usr/share/swift (~1.5GB)"
-        echo "  - Docker images (varies)"
+        
+        set -e  # Exit on error
+        
+        # Install LVM and btrfs-progs if needed
+        echo ">>> Installing LVM tools..."
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq lvm2
+        if [[ "$USE_BTRFS" == "true" ]]; then
+          echo ">>> Installing Btrfs tools..."
+          sudo apt-get install -y -qq btrfs-progs
+        fi
+        
+        # Disable swap
         echo ""
-        echo "Run 'sudo rm -rf <path>' to remove unwanted directories"
+        echo ">>> Disabling swap..."
+        sudo swapoff -a || true
+        
+        # Unmount /mnt
+        echo ">>> Unmounting /mnt..."
+        sudo umount /mnt || true
+        
+        # Calculate loopback size (80% of available root space)
+        avail_kb=$(df / --output=avail | tail -1 | tr -d ' ')
+        avail_gb=$((avail_kb / 1024 / 1024))
+        loop_size=$((avail_gb * 80 / 100))
+        
+        # Ensure minimum size of 10GB
+        if [[ $loop_size -lt 10 ]]; then
+          loop_size=10
+        fi
+        
+        echo ""
+        echo ">>> Available space on root: ${avail_gb}GB"
+        echo ">>> Creating ${loop_size}GB loopback file..."
+        
+        # Create loopback file
+        sudo fallocate -l ${loop_size}G /space.img
+        
+        # Find available loop device
+        loop_dev=$(sudo losetup -f)
+        echo ">>> Using loop device: $loop_dev"
+        sudo losetup "$loop_dev" /space.img
+        
+        # Create LVM physical volumes
+        echo ""
+        echo ">>> Creating LVM physical volumes..."
+        sudo pvcreate /dev/sda1
+        sudo pvcreate "$loop_dev"
+        
+        # Create volume group
+        echo ">>> Creating volume group 'workspace'..."
+        sudo vgcreate workspace /dev/sda1 "$loop_dev"
+        
+        # Create logical volume
+        echo ">>> Creating logical volume 'work'..."
+        sudo lvcreate -l 100%FREE -n work workspace
+        
+        # Show LVM info
+        echo ""
+        echo ">>> LVM configuration:"
+        sudo vgdisplay workspace
+        
+        # Format the volume
+        echo ""
+        if [[ "$USE_BTRFS" == "true" ]]; then
+          echo ">>> Formatting as Btrfs with zstd compression..."
+          sudo mkfs.btrfs -f /dev/workspace/work
+          
+          echo ">>> Mounting at /home/runner/work..."
+          sudo mount -o compress=zstd /dev/workspace/work /home/runner/work
+        else
+          echo ">>> Formatting as ext4..."
+          sudo mkfs.ext4 -F /dev/workspace/work
+          
+          echo ">>> Mounting at /home/runner/work..."
+          sudo mount /dev/workspace/work /home/runner/work
+        fi
+        
+        # Fix ownership
+        echo ">>> Fixing ownership..."
+        sudo chown -R runner:runner /home/runner/work
+        
+        echo ""
+        echo ">>> Disk merge complete!"
+
+    # ============================================
+    # PHASE 5: Report final disk state
+    # ============================================
+    - name: Final disk state
+      shell: bash
+      run: |
+        echo ""
+        echo "============================================"
+        echo "  GTFO - Final Disk Usage"
+        echo "============================================"
+        echo ""
+        echo ">>> Filesystem usage (df -h)"
+        echo "--------------------------------------------"
+        df -h
+        echo ""
+        echo ">>> Top-level directory sizes"
+        echo "--------------------------------------------"
+        sudo du -sm /* 2>/dev/null | sort -rn | head -15 || true
+        echo ""
+        echo "============================================"
+        echo "  GTFO complete!"
         echo "============================================"

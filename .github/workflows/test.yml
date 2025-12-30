@@ -3,10 +3,97 @@ name: Test GTFO
 on:
   push:
   workflow_dispatch:
+    inputs:
+      test-mode:
+        description: 'Test mode to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - cleanup-only
+          - merge-ext4
+          - merge-btrfs
 
 jobs:
-  test-ubuntu:
+  # Test 1: Default cleanup (no merge)
+  test-cleanup:
+    if: ${{ github.event_name == 'push' || github.event.inputs.test-mode == 'all' || github.event.inputs.test-mode == 'cleanup-only' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./
+      - name: Run GTFO (cleanup only)
+        uses: ./
+        with:
+          remove-android: 'true'
+          remove-dotnet: 'true'
+          remove-haskell: 'true'
+          remove-boost: 'true'
+          remove-swift: 'true'
+          merge-disks: 'false'
+      - name: Verify workspace is writable
+        run: |
+          echo "Testing workspace write access..."
+          echo "test" > test-file.txt
+          cat test-file.txt
+          rm test-file.txt
+          echo "Workspace is writable!"
+
+  # Test 2: Merge disks with ext4
+  test-merge-ext4:
+    if: ${{ github.event.inputs.test-mode == 'all' || github.event.inputs.test-mode == 'merge-ext4' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run GTFO (merge with ext4)
+        uses: ./
+        with:
+          remove-android: 'true'
+          remove-dotnet: 'true'
+          remove-haskell: 'true'
+          remove-boost: 'true'
+          remove-swift: 'true'
+          merge-disks: 'true'
+          use-btrfs: 'false'
+      - name: Verify merged workspace
+        run: |
+          echo "Checking mount..."
+          mount | grep /home/runner/work || true
+          df -h /home/runner/work
+          echo ""
+          echo "Testing write access..."
+          echo "test" > test-file.txt
+          cat test-file.txt
+          rm test-file.txt
+          echo "Merged workspace is functional!"
+
+  # Test 3: Merge disks with Btrfs + compression
+  test-merge-btrfs:
+    if: ${{ github.event.inputs.test-mode == 'all' || github.event.inputs.test-mode == 'merge-btrfs' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run GTFO (merge with Btrfs)
+        uses: ./
+        with:
+          remove-android: 'true'
+          remove-dotnet: 'true'
+          remove-haskell: 'true'
+          remove-boost: 'true'
+          remove-swift: 'true'
+          merge-disks: 'true'
+          use-btrfs: 'true'
+      - name: Verify Btrfs workspace
+        run: |
+          echo "Checking mount..."
+          mount | grep /home/runner/work || true
+          df -h /home/runner/work
+          echo ""
+          echo "Checking Btrfs compression..."
+          cat /proc/mounts | grep workspace || true
+          echo ""
+          echo "Testing write access..."
+          echo "test" > test-file.txt
+          cat test-file.txt
+          rm test-file.txt
+          echo "Btrfs workspace is functional!"
