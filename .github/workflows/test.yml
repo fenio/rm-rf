@@ -110,6 +110,14 @@ jobs:
           echo ">>> Formatting as ext4..."
           sudo mkfs.ext4 -F /dev/workspace/work
           sudo mount /dev/workspace/work /home/runner/work
+          
+          # Create swap file
+          echo ">>> Creating 4GB swap file..."
+          sudo fallocate -l 4G /home/runner/work/.swapfile
+          sudo chmod 600 /home/runner/work/.swapfile
+          sudo mkswap /home/runner/work/.swapfile
+          sudo swapon /home/runner/work/.swapfile
+          
           sudo chown -R runner:runner /home/runner/work
           
           echo ""
@@ -234,6 +242,12 @@ jobs:
           echo ">>> Formatting as Btrfs with zstd compression..."
           sudo mkfs.btrfs -f /dev/workspace/work
           sudo mount -o compress=zstd /dev/workspace/work /home/runner/work
+          
+          # Create swap file (Btrfs requires special handling)
+          echo ">>> Creating 4GB swap file..."
+          sudo btrfs filesystem mkswapfile --size 4G /home/runner/work/.swapfile
+          sudo swapon /home/runner/work/.swapfile
+          
           sudo chown -R runner:runner /home/runner/work
           
           echo ""
